@@ -57,23 +57,30 @@ npm --workspace server run test:integration
 
 (배포 → 2명 등록 → 각자 투표 → 집계 확인 → 동일인 재투표 거부)
 
-## 알려진 이슈 (Known Issues)
+## 디버깅 노트 — 로컬 devnet에서 마주친 함정 (해결됨)
 
-이 프로젝트를 로컬 devnet에서 검증하며 마주친, **SDK/환경 레벨의 실제 블로커**입니다
-(코드 자체는 컴파일·타입체크·배포까지 통과):
+이 DApp을 로컬 devnet에서 끝까지 동작시키며 풀어낸 실제 이슈들입니다. 같은 길을 걷는
+개발자에게 도움이 되도록 남깁니다.
 
-1. **컨트랙트 콜의 `NotNormalized` (error 117).**
-   최신 통합 SDK 라인(`midnight-js-contracts` 4.1.1 + `wallet-sdk-facade` 4.0.1 +
-   `ledger-v8` 8.1.0)에서 `deployContract`는 성공하나, 첫 `callTx`(register/vote)가
-   `1010: Invalid Transaction: Custom error: 117` (TransactionMalformed::NotNormalized)으로
-   거부됩니다. `walletProvider.balanceTx`는 공식 `compact-cli-dev` 템플릿과 동일 패턴
-   (`balanceUnboundTransaction` → `finalizeRecipe`)이라 사용자 코드 문제가 아니며,
-   콜 경로의 SDK 버전 호환성 회귀로 의심됩니다. 이전 검증에서 콜까지 동작한 조합은
-   구 라인(`facade` 3.0.0 / `ledger-v8` 8.0.3 / `midnight-js` 4.0.4)뿐이었습니다.
+1. **컨트랙트 콜의 `error 117` (NotNormalized) — `additionalFeeOverhead`로 해결.**
+   배포(`deployContract`)는 되는데 첫 `callTx`만 `1010: Custom error: 117`로 거부되는
+   증상. 근본 원인은 서명이 아니라 **수수료**였습니다. 로컬 devnet은 수수료 단가가 거의 0이라
+   증명된 콜 트랜잭션의 `feesWithMargin`이 **0 SPECK**를 반환 → balancing이 빈
+   `DustActions`를 만들어 정규화 실패. (배포는 `ContractDeploy` 최소비용 덕에 통과.)
+   **해결**: `WalletFacade` 설정의 `costParameters`에
+   `additionalFeeOverhead: 300_000_000_000_000n` 추가 → 모든 tx에 0이 아닌 수수료 강제.
+   (`server/src/wallet.ts` 참고.)
 
-2. **로컬 devnet 제네시스 dust 오염 (error 196, DustDoubleSpend).**
-   같은 제네시스 지갑으로 반복 펀딩하면 dust 코인 재선택으로 `Custom error: 196`이
-   날 수 있습니다. 깨끗한 재시작(볼륨 리셋)으로 해소됩니다.
+2. **콜 트랜잭션 intent 서명 — `signTransactionIntents` 패턴.**
+   콜의 intent는 올바른 proof 마커로 서명되어야 정규화됩니다. `signRecipe`는 'pre-proof'를
+   하드코딩하는 SDK 버그가 있어, 공식 example-counter처럼 baseTransaction은 `'proof'`,
+   balancingTransaction은 `'pre-proof'`로 직접 서명합니다. (`server/src/voting-service.ts`.)
+
+3. **제네시스 dust 오염 (`error 196`, DustDoubleSpend).**
+   같은 제네시스 지갑으로 반복 펀딩하면 dust 코인 재선택으로 발생. devnet 컨테이너 재시작으로 해소.
+
+> SDK 라인은 단일 통합 버전으로 충분합니다: `midnight-js-contracts` 4.1.1 +
+> `wallet-sdk-facade` 4.0.1 + `ledger-v8` 8.1.0. 버전 다운그레이드 불필요.
 
 ## 정직한 한계 (데모 아키텍처)
 

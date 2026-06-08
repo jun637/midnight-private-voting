@@ -62,7 +62,15 @@ export function deriveKeys(seedHex: string) {
 function buildConfiguration(): DefaultConfiguration {
   return {
     networkId: NETWORK_ID,
-    costParameters: { feeBlocksMargin: 5 },
+    // additionalFeeOverhead is REQUIRED on local devnet: fee prices are ~0, so a
+    // proven contract callTx computes a 0-SPECK fee, which makes balancing emit
+    // empty DustActions and the node rejects the tx with error 117 (NotNormalized).
+    // Forcing a non-zero fee overhead makes balancing produce real dust spends.
+    // (Deploy happens to work without it because ContractDeploy has a min cost.)
+    costParameters: {
+      feeBlocksMargin: 5,
+      additionalFeeOverhead: 300_000_000_000_000n,
+    },
     relayURL: new URL(NODE_URL),
     provingServerUrl: new URL(PROOF_SERVER),
     indexerClientConnection: {

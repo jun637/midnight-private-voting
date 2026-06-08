@@ -42,6 +42,49 @@ export interface PollState {
 }
 
 /**
+ * Sign all unshielded offers in a transaction's intents, using the correct
+ * proof marker. Works around a wallet-SDK bug where `signRecipe` hardcodes the
+ * 'pre-proof' marker — which fails for proven (UnboundTransaction) intents that
+ * carry 'proof' data, leaving the transaction unsigned and the node rejecting it
+ * with error 117 (NotNormalized). Mirrors the canonical midnightntwrk/example-counter.
+ */
+function signTransactionIntents(
+  tx: { intents?: Map<number, any> },
+  signFn: (payload: Uint8Array) => any,
+  proofMarker: "proof" | "pre-proof",
+): void {
+  if (!tx.intents || tx.intents.size === 0) return;
+  for (const segment of tx.intents.keys()) {
+    const intent = tx.intents.get(segment);
+    if (!intent) continue;
+    const cloned = (ledgerSdk as any).Intent.deserialize(
+      "signature",
+      proofMarker,
+      "pre-binding",
+      intent.serialize(),
+    );
+    const signature = signFn(cloned.signatureData(segment));
+    if (cloned.fallibleUnshieldedOffer) {
+      const sigs = cloned.fallibleUnshieldedOffer.inputs.map(
+        (_: any, i: number) =>
+          cloned.fallibleUnshieldedOffer.signatures.at(i) ?? signature,
+      );
+      cloned.fallibleUnshieldedOffer =
+        cloned.fallibleUnshieldedOffer.addSignatures(sigs);
+    }
+    if (cloned.guaranteedUnshieldedOffer) {
+      const sigs = cloned.guaranteedUnshieldedOffer.inputs.map(
+        (_: any, i: number) =>
+          cloned.guaranteedUnshieldedOffer.signatures.at(i) ?? signature,
+      );
+      cloned.guaranteedUnshieldedOffer =
+        cloned.guaranteedUnshieldedOffer.addSignatures(sigs);
+    }
+    tx.intents.set(segment, cloned);
+  }
+}
+
+/**
  * Holds a funded devnet wallet and a deployed Private Voting contract.
  * Acts as a proving service: it stores each voter's secret material and, for
  * every operation, reconnects to the contract with that voter's private state
@@ -81,6 +124,18 @@ export class VotingService {
           },
           { ttl: ttl ?? new Date(Date.now() + 30 * 60 * 1000) },
         );
+        // Sign the contract-call intents with the correct proof markers so the
+        // transaction normalizes (else the node rejects calls with error 117).
+        // baseTransaction is proven ('proof'); the balancing tx is 'pre-proof'.
+        const signFn = (p: Uint8Array) => keys.unshieldedKeystore.signData(p);
+        signTransactionIntents((recipe as any).baseTransaction, signFn, "proof");
+        if ((recipe as any).balancingTransaction) {
+          signTransactionIntents(
+            (recipe as any).balancingTransaction,
+            signFn,
+            "pre-proof",
+          );
+        }
         return await facade.finalizeRecipe(recipe);
       },
       submitTx: (tx: unknown) => facade.submitTransaction(tx as never),
