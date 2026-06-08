@@ -57,6 +57,24 @@ npm --workspace server run test:integration
 
 (배포 → 2명 등록 → 각자 투표 → 집계 확인 → 동일인 재투표 거부)
 
+## 알려진 이슈 (Known Issues)
+
+이 프로젝트를 로컬 devnet에서 검증하며 마주친, **SDK/환경 레벨의 실제 블로커**입니다
+(코드 자체는 컴파일·타입체크·배포까지 통과):
+
+1. **컨트랙트 콜의 `NotNormalized` (error 117).**
+   최신 통합 SDK 라인(`midnight-js-contracts` 4.1.1 + `wallet-sdk-facade` 4.0.1 +
+   `ledger-v8` 8.1.0)에서 `deployContract`는 성공하나, 첫 `callTx`(register/vote)가
+   `1010: Invalid Transaction: Custom error: 117` (TransactionMalformed::NotNormalized)으로
+   거부됩니다. `walletProvider.balanceTx`는 공식 `compact-cli-dev` 템플릿과 동일 패턴
+   (`balanceUnboundTransaction` → `finalizeRecipe`)이라 사용자 코드 문제가 아니며,
+   콜 경로의 SDK 버전 호환성 회귀로 의심됩니다. 이전 검증에서 콜까지 동작한 조합은
+   구 라인(`facade` 3.0.0 / `ledger-v8` 8.0.3 / `midnight-js` 4.0.4)뿐이었습니다.
+
+2. **로컬 devnet 제네시스 dust 오염 (error 196, DustDoubleSpend).**
+   같은 제네시스 지갑으로 반복 펀딩하면 dust 코인 재선택으로 `Custom error: 196`이
+   날 수 있습니다. 깨끗한 재시작(볼륨 리셋)으로 해소됩니다.
+
 ## 정직한 한계 (데모 아키텍처)
 
 - **로컬 devnet 전용.** 테스트 시드는 일회용이며 절대 커밋하지 않습니다(`.gitignore` 참고).
