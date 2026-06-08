@@ -27,8 +27,6 @@ const loadSaved = (addr: string | null): Saved | null => {
   }
 };
 
-const STEPS = ["익명 등록", "피드백 작성", "익명 제출", "완료 · 검증"];
-
 export function App() {
   const [config, setConfig] = useState<Config | null>(null);
   const [results, setResults] = useState<Results | null>(null);
@@ -143,7 +141,6 @@ export function App() {
 
   const choiceLabel = choice >= 0 ? config.choiceOptions[choice] : "(미선택)";
   const submitting = busy && step < 4 && !me?.done && rating >= 1;
-  const currentStep = me?.done ? 3 : submitting ? 2 : me ? 1 : 0;
 
   // ─── LEFT: 참여 (action) ───
   const actionContent = submitting ? (
@@ -154,23 +151,9 @@ export function App() {
     </div>
   ) : !me ? (
     <div className="card hero">
-      <div className="hero-eyebrow">STEP 1 · 시작</div>
-      <h2>30초면 끝나는 익명 피드백</h2>
-      <p className="lead">오늘 세션을 <b>익명으로</b> 평가하고, 모두의 결과를 <b>실시간으로</b> 함께 봅니다.</p>
-      <ol className="how">
-        <li><b>익명 등록</b> — 신원 없는 디지털 신분(commitment)을 만듭니다</li>
-        <li><b>작성</b> — 만족도 ★, 객관식, 자유의견</li>
-        <li><b>제출</b> — 1인 1회. 누가 썼는지는 체인에 안 남습니다</li>
-      </ol>
-      <div className="outcome">
-        <div className="outcome-h">제출하면 오른쪽 대시보드에서 보게 됩니다 ↓</div>
-        <ul>
-          <li>✓ 내 신원이 체인에 <b>남지 않은</b> 암호학적 증거</li>
-          <li>✓ 모두의 <b>실시간 집계</b> (만족도·객관식·자유의견)</li>
-          <li>✓ 공개 기록에서 <b>내 제출을 못 찾는</b> 검증</li>
-        </ul>
-      </div>
-      <button className="primary big" disabled={busy} onClick={register}>① 익명으로 시작하기 →</button>
+      <h2>오늘 세션, 익명으로 평가하기</h2>
+      <p className="lead">먼저 익명 신분을 만들면 시작됩니다. 신원은 체인에 남지 않습니다.</p>
+      <button className="primary big" disabled={busy} onClick={register}>익명으로 시작하기 →</button>
       {msg && <div className="msg">{msg}</div>}
     </div>
   ) : !me.done ? (
@@ -209,12 +192,6 @@ export function App() {
   // ─── RIGHT: 대시보드 (observe / verify) ───
   const dashboardContent = (
     <>
-      {!me && (
-        <div className="card preview-hint">
-          👈 왼쪽에서 시작하면, 여기에 <b>당신의 익명 증거</b>와 <b>모두의 결과</b>가 실시간으로 채워집니다.
-          아래는 미리 보는 결과 화면과 작동 원리예요.
-        </div>
-      )}
       {me && (
         <DualPanel
           rating={me.done ? rating || 5 : rating}
@@ -232,24 +209,24 @@ export function App() {
     </>
   );
 
+  const dashboardLocked = !me;
   return (
     <div className="wrap wide">
       <Header config={config} />
-      <Stepper current={currentStep} />
-      <div className="layout">
+      <div className={`layout${dashboardLocked ? " pre" : ""}`}>
         <section className="col col-action">
-          <div className="col-tag">
-            🙋 참여 · 당신이 하는 곳
-            <span className="col-sub">여기서 등록하고 피드백을 작성·제출합니다</span>
-          </div>
+          <div className="col-tag">🙋 참여 · 당신이 하는 곳</div>
           {actionContent}
         </section>
-        <section className="col col-dashboard">
-          <div className="col-tag dash">
-            📊 대시보드 · 관찰 · 검증
-            <span className="col-sub">내 익명 증거와 모두의 결과가 실시간으로 보입니다</span>
-          </div>
-          {dashboardContent}
+        <section className={`col col-dashboard${dashboardLocked ? " locked" : ""}`}>
+          <div className="col-tag dash">📊 대시보드 · 관찰 · 검증</div>
+          {dashboardLocked && (
+            <div className="lock-overlay">
+              <div className="lock-badge">🔒</div>
+              <div className="lock-text">왼쪽에서 <b>참여를 시작</b>하면<br />이 영역이 활성화됩니다</div>
+            </div>
+          )}
+          <div className="dash-body">{dashboardContent}</div>
         </section>
       </div>
       <footer>
@@ -258,23 +235,6 @@ export function App() {
         )}
         <div className="note">로컬 devnet · 서버가 증명을 대행합니다. 온체인엔 익명 commitment와 nullifier만 기록됩니다.</div>
       </footer>
-    </div>
-  );
-}
-
-function Stepper({ current }: { current: number }) {
-  return (
-    <div className="stepper">
-      {STEPS.map((label, i) => {
-        const state = current > i ? "done" : current === i ? "active" : "todo";
-        return (
-          <div key={i} className={`sstep ${state}`}>
-            <span className="sdot">{state === "done" ? "✓" : i + 1}</span>
-            <span className="slabel">{label}</span>
-            {i < STEPS.length - 1 && <span className="sline" />}
-          </div>
-        );
-      })}
     </div>
   );
 }

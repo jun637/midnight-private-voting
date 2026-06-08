@@ -268,3 +268,40 @@ code { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 
 /* dashboard pre-participation framing */
 .preview-hint { font-size: .88rem; line-height: 1.6; background: linear-gradient(90deg, rgba(124,92,255,.1), transparent); border: 1px dashed #3a2a66; }
+
+/* ─── v3': layout-enforced flow (lock the dashboard until you participate) ─── */
+.col-dashboard { position: relative; }
+.col-dashboard.locked .dash-body {
+  opacity: .28;
+  filter: blur(2px) saturate(.6);
+  pointer-events: none;
+  user-select: none;
+}
+.lock-overlay {
+  position: absolute;
+  inset: 52px 0 0 0; /* below the col-tag */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 60px;
+  text-align: center;
+  z-index: 3;
+  pointer-events: none;
+}
+.lock-badge {
+  font-size: 2.4rem;
+  width: 72px; height: 72px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: rgba(13,16,30,.85);
+  border: 1px solid #2a2f4a;
+  box-shadow: 0 8px 30px rgba(0,0,0,.5);
+}
+.lock-text { margin-top: 16px; color: var(--text); font-size: 1rem; line-height: 1.6; background: rgba(13,16,30,.7); padding: 8px 16px; border-radius: 10px; }
+.lock-text b { color: var(--accent); }
+
+/* spotlight the single live action while the dashboard is locked */
+.layout.pre .col-action .hero { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 14px 50px rgba(124,92,255,.25); }
+.hero h2 { font-size: 1.5rem; }
+.primary.big { width: 100%; padding: 15px; font-size: 1.05rem; margin-top: 8px; }
