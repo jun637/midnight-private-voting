@@ -1,0 +1,26 @@
+{
+  "name": "@private-voting/contract",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Compiled Compact voting contract (commitment / nullifier)",
+  "main": "src/managed/voting/contract/index.js",
+  "types": "src/managed/voting/contract/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/managed/voting/contract/index.d.ts",
+      "default": "./src/managed/voting/contract/index.js"
+    },
+    "./zk": "./src/managed/voting"
+  },
+  "files": [
+    "src/voting.compact",
+    "src/managed"
+  ],
+  "scripts": {
+    "build": "compact compile src/voting.compact src/managed/voting"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "^0.16.0"
+  }
+}

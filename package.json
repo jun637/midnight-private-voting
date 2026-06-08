@@ -1,0 +1,12 @@
+{
+  "name": "midnight-private-voting",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Anonymous, double-vote-resistant voting on Midnight (commitment / nullifier ZK pattern)",
+  "license": "Apache-2.0",
+  "workspaces": [
+    "contract",
+    "server",
+    "ui"
+  ]
+}

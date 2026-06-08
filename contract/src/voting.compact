@@ -1,0 +1,98 @@
+// Private Voting — anonymous, double-vote-resistant ballot on Midnight.
+//
+// Privacy model (commitment / nullifier pattern):
+//   - Eligible voters are registered as COMMITMENTS in a Merkle tree.
+//     No one can see who is eligible or link a commitment to an identity.
+//   - To vote, a voter proves (in zero knowledge) that their commitment is
+//     in the tree, then publishes a NULLIFIER derived from the same secret
+//     under a DIFFERENT domain. The nullifier prevents voting twice but is
+//     cryptographically unlinkable to the commitment — so the ballot is anonymous.
+//   - Tallies are public counts; individual votes are not attributable.
+
+pragma language_version >= 0.23;
+
+import CompactStandardLibrary;
+
+// Merkle tree of registered voter commitments. Historic so that membership
+// proofs created before later registrations remain valid. Depth 10 => up to 1024 voters.
+export ledger registeredVoters: HistoricMerkleTree<10, Bytes<32>>;
+
+// Used nullifiers — public by design (you can see SOME vote happened),
+// but unlinkable to commitments (you cannot tell WHO voted).
+export ledger usedNullifiers: Set<Bytes<32>>;
+
+// Per-option vote tallies. Key = option index, value = running Counter.
+export ledger tallies: Map<Uint<8>, Counter>;
+
+// Number of valid options (set at deployment).
+export ledger optionCount: Uint<8>;
+
+// Total ballots cast.
+export ledger totalVotes: Counter;
+
+constructor(numOptions: Uint<8>) {
+  optionCount = disclose(numOptions);
+}
+
+// The voter's secret identity material — never leaves the client.
+witness voter_secret(): Bytes<32>;
+// Random blinding factor for the registration commitment.
+witness voter_randomness(): Bytes<32>;
+// Merkle proof that a commitment exists in the tree.
+witness get_voter_path(commitment: Bytes<32>): MerkleTreePath<10, Bytes<32>>;
+
+// CRITICAL: commitment and nullifier use DIFFERENT domains so an observer
+// cannot hash a commitment's inputs and match it to a nullifier.
+circuit derive_commitment(secret: Bytes<32>, randomness: Bytes<32>): Bytes<32> {
+  return persistentCommit<Vector<2, Bytes<32>>>(
+    [pad(32, "vote:commit:::"), secret],
+    randomness
+  );
+}
+
+circuit derive_nullifier(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "vote:nullify::"),
+    secret
+  ]);
+}
+
+// Register an eligible voter. The commitment goes into the Merkle tree;
+// no one can see what it contains.
+export circuit register(): [] {
+  const secret = voter_secret();
+  const randomness = voter_randomness();
+  const commitment = derive_commitment(secret, randomness);
+  registeredVoters.insert(commitment);
+}
+
+// Cast an anonymous vote for `option`.
+export circuit vote(option: Uint<8>): [] {
+  assert(option < optionCount, "Invalid option");
+  // The chosen option is public (it must be counted); only voter identity is hidden.
+  const opt = disclose(option);
+
+  const secret = voter_secret();
+  const randomness = voter_randomness();
+  const commitment = derive_commitment(secret, randomness);
+
+  // Prove the commitment is in the tree without revealing which leaf.
+  const path = get_voter_path(commitment);
+  assert(
+    registeredVoters.checkRoot(disclose(merkleTreePathRoot<10, Bytes<32>>(path))),
+    "Not a registered voter"
+  );
+
+  // Nullifier (different domain than commitment — unlinkable) prevents double voting.
+  const nul = derive_nullifier(secret);
+  assert(disclose(!usedNullifiers.member(disclose(nul))), "Already voted");
+  usedNullifiers.insert(disclose(nul));
+
+  // Tally the vote. Initialize the slot on first use.
+  if (!tallies.member(opt)) {
+    tallies.insert(opt, default<Counter>);
+  }
+  tallies.lookup(opt).increment(1);
+
+  totalVotes.increment(1);
+}

@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+
+# build output
+ui/dist/
+**/*.tsbuildinfo
+
+# Midnight private state — contains voter secrets. NEVER commit.
+**/midnight-level-db/
+**/*-private-state/
+**/voting-*/
+*.ldb
+*.seed
+seeds.json
+.env
+.env.*
+
+# subagent / tooling scratch
+.midnight-expert/
+
+# logs / os
+*.log
+.DS_Store
