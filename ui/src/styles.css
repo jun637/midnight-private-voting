@@ -202,3 +202,31 @@ code { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 .wall { display: flex; flex-direction: column; gap: 8px; }
 .note-card { background: #0e1120; border-left: 3px solid var(--accent); border-radius: 8px; padding: 10px 14px; font-size: .88rem; line-height: 1.5; }
 .done-card { text-align: center; }
+
+/* ─── v2: two-column 대구분 layout ─── */
+.wrap.wide { max-width: 1180px; }
+.layout {
+  display: grid;
+  grid-template-columns: 400px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+.col { min-width: 0; }
+.col-action { position: sticky; top: 20px; }
+.col-tag {
+  font-weight: 800;
+  font-size: 0.95rem;
+  letter-spacing: .2px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  border: 1px solid #2a2f4a;
+  background: #161a2b;
+}
+.col-action > .col-tag { background: linear-gradient(90deg, rgba(124,92,255,.22), rgba(124,92,255,.05)); border-color: #3a2a66; }
+.col-dashboard > .col-tag { background: linear-gradient(90deg, rgba(0,224,198,.18), rgba(0,224,198,.04)); border-color: #14463f; }
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .col-action { position: static; }
+}

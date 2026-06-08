@@ -38,7 +38,7 @@ export function App() {
   const [feedback, setFeedback] = useState("");
 
   const [busy, setBusy] = useState(false);
-  const [step, setStep] = useState(0); // ZK ceremony step
+  const [step, setStep] = useState(0);
   const [reveal, setReveal] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -63,7 +63,6 @@ export function App() {
     return () => clearInterval(id);
   }, [refresh]);
 
-  // Load my saved registration for the current contract (auto-discards stale ones).
   useEffect(() => {
     setMe(loadSaved(addr));
   }, [addr]);
@@ -74,12 +73,7 @@ export function App() {
     setMsg("참여자 등록 중… (commitment 생성 + 트리 합류)");
     try {
       const v = await api.register();
-      const saved: Saved = {
-        voterId: v.voterId!,
-        commitment: v.commitment,
-        nullifier: v.nullifier,
-        done: false,
-      };
+      const saved: Saved = { voterId: v.voterId!, commitment: v.commitment, nullifier: v.nullifier, done: false };
       localStorage.setItem(savedKey(addr), JSON.stringify(saved));
       setMe(saved);
       setMsg("등록 완료 — 이제 익명으로 피드백을 남길 수 있어요.");
@@ -102,10 +96,7 @@ export function App() {
     setBusy(true);
     setStep(0);
     setMsg("");
-    // Animate the ZK ceremony while the real proof is generated server-side.
-    ceremonyTimer.current = setInterval(() => {
-      setStep((s) => (s < 3 ? s + 1 : s));
-    }, 1800);
+    ceremonyTimer.current = setInterval(() => setStep((s) => (s < 3 ? s + 1 : s)), 1800);
     try {
       const r = await api.submit({ voterId: me.voterId, rating, choice, feedback });
       if (ceremonyTimer.current) clearInterval(ceremonyTimer.current);
@@ -132,6 +123,7 @@ export function App() {
     }
   }
 
+  // ─── Loading (full width) ───
   if (!config || config.phase !== "ready") {
     return (
       <div className="wrap">
@@ -150,98 +142,79 @@ export function App() {
   const choiceLabel = choice >= 0 ? config.choiceOptions[choice] : "(미선택)";
   const submitting = busy && step < 4 && !me?.done && rating >= 1;
 
-  return (
-    <div className="wrap">
-      <Header config={config} />
+  // ─── LEFT: 참여 (action) ───
+  const actionContent = submitting ? (
+    <div className="card">
+      <h2>영지식 증명 생성 중…</h2>
+      <ZkCeremony step={step} commitment={me?.commitment ?? ""} nullifier={me?.nullifier ?? ""} />
+      <p className="muted">실제 ZK 증명을 만드는 중이라 수십 초 걸립니다. 이게 진짜 Midnight 연산이에요.</p>
+    </div>
+  ) : !me ? (
+    <div className="card actions">
+      <p className="lead">이 피드백은 <b>Midnight 방식</b>으로 받습니다. 먼저 참여자로 등록하면 당신의 익명 신분(commitment)이 만들어집니다.</p>
+      <button className="primary" disabled={busy} onClick={register}>참여 시작 (익명 등록)</button>
+      {msg && <div className="msg">{msg}</div>}
+    </div>
+  ) : !me.done ? (
+    <div className="card">
+      <h2>{config.title}</h2>
+      <h4>{config.ratingQuestion}</h4>
+      <div className="stars">
+        {Array.from({ length: config.ratingMax }, (_, i) => (
+          <button key={i} className={`star ${rating >= i + 1 ? "on" : ""}`} onClick={() => setRating(i + 1)} aria-label={`${i + 1}점`}>★</button>
+        ))}
+      </div>
+      <h4>{config.choiceQuestion}</h4>
+      <div className="choices">
+        {config.choiceOptions.map((opt, i) => (
+          <button key={i} className={`choice ${choice === i ? "on" : ""}`} onClick={() => setChoice(i)}>{opt}</button>
+        ))}
+      </div>
+      <h4>{config.freeTextPrompt}</h4>
+      <textarea className="freetext" rows={3} placeholder="자유롭게 남겨주세요 (선택)" value={feedback} onChange={(e) => setFeedback(e.target.value)} />
+      <button className="primary" disabled={busy} onClick={submit}>익명으로 제출</button>
+      {msg && <div className="msg">{msg}</div>}
+    </div>
+  ) : (
+    <div className="card done-card">
+      <div className="done">✅ 제출 완료 (익명)</div>
+      <div className="muted">{msg || "당신의 신원은 체인에 남지 않았습니다."}</div>
+    </div>
+  );
 
-      {/* ─── Submitting: ZK ceremony takes over ─── */}
-      {submitting ? (
-        <div className="card">
-          <h2>영지식 증명 생성 중…</h2>
-          <ZkCeremony step={step} commitment={me?.commitment ?? ""} nullifier={me?.nullifier ?? ""} />
-          <p className="muted">실제 ZK 증명을 만드는 중이라 수십 초 걸립니다. 이게 진짜 Midnight 연산이에요.</p>
-        </div>
-      ) : !me ? (
-        /* ─── Not registered: intro + domain separation + join ─── */
-        <>
-          <div className="card actions">
-            <p className="lead">이 피드백은 <b>Midnight 방식</b>으로 받습니다. 먼저 참여자로 등록하면 당신의 익명 신분(commitment)이 만들어집니다.</p>
-            <button className="primary" disabled={busy} onClick={register}>참여 시작 (익명 등록)</button>
-            {msg && <div className="msg">{msg}</div>}
-          </div>
-          <DomainSeparation commitment="" nullifier="" />
-        </>
-      ) : !me.done ? (
-        /* ─── Registered, not submitted: form + live dual panel + domain sep ─── */
-        <>
-          <div className="card">
-            <h2>{config.title}</h2>
-            <h4>{config.ratingQuestion}</h4>
-            <div className="stars">
-              {Array.from({ length: config.ratingMax }, (_, i) => (
-                <button
-                  key={i}
-                  className={`star ${rating >= i + 1 ? "on" : ""}`}
-                  onClick={() => setRating(i + 1)}
-                  aria-label={`${i + 1}점`}
-                >★</button>
-              ))}
-            </div>
-
-            <h4>{config.choiceQuestion}</h4>
-            <div className="choices">
-              {config.choiceOptions.map((opt, i) => (
-                <button
-                  key={i}
-                  className={`choice ${choice === i ? "on" : ""}`}
-                  onClick={() => setChoice(i)}
-                >{opt}</button>
-              ))}
-            </div>
-
-            <h4>{config.freeTextPrompt}</h4>
-            <textarea
-              className="freetext"
-              rows={3}
-              placeholder="자유롭게 남겨주세요 (선택)"
-              value={feedback}
-              onChange={(e) => setFeedback(e.target.value)}
-            />
-
-            <button className="primary" disabled={busy} onClick={submit}>익명으로 제출</button>
-            {msg && <div className="msg">{msg}</div>}
-          </div>
-
-          <DualPanel
-            rating={rating}
-            choiceLabel={choiceLabel}
-            feedback={feedback}
-            commitment={me.commitment}
-            nullifier={me.nullifier}
-          />
-          <DomainSeparation commitment={me.commitment} nullifier={me.nullifier} />
-        </>
-      ) : (
-        /* ─── Submitted: confirmation + find-your-vote + dual panel ─── */
-        <>
-          <div className="card done-card">
-            <div className="done">✅ 제출 완료 (익명)</div>
-            <div className="muted">{msg || "당신의 신원은 체인에 남지 않았습니다."}</div>
-          </div>
-          <FindYourVote chain={chain} myNullifier={me.nullifier} reveal={reveal} onReveal={() => setReveal(true)} />
-          <DualPanel
-            rating={rating || 5}
-            choiceLabel={choice >= 0 ? choiceLabel : "제출됨"}
-            feedback={feedback}
-            commitment={me.commitment}
-            nullifier={me.nullifier}
-          />
-        </>
+  // ─── RIGHT: 대시보드 (observe / verify) ───
+  const dashboardContent = (
+    <>
+      {me && (
+        <DualPanel
+          rating={me.done ? rating || 5 : rating}
+          choiceLabel={me.done ? (choice >= 0 ? choiceLabel : "제출됨") : choiceLabel}
+          feedback={feedback}
+          commitment={me.commitment}
+          nullifier={me.nullifier}
+        />
       )}
-
-      {/* ─── Live results always visible (presenter-friendly) ─── */}
+      <DomainSeparation commitment={me?.commitment ?? ""} nullifier={me?.nullifier ?? ""} />
+      {me?.done && (
+        <FindYourVote chain={chain} myNullifier={me.nullifier} reveal={reveal} onReveal={() => setReveal(true)} />
+      )}
       {results && <ResultsView config={config} results={results} />}
+    </>
+  );
 
+  return (
+    <div className="wrap wide">
+      <Header config={config} />
+      <div className="layout">
+        <section className="col col-action">
+          <div className="col-tag">🙋 참여 · 당신이 하는 곳</div>
+          {actionContent}
+        </section>
+        <section className="col col-dashboard">
+          <div className="col-tag dash">📊 대시보드 · 관찰 · 검증</div>
+          {dashboardContent}
+        </section>
+      </div>
       <footer>
         {config.contractAddress && (
           <div className="addr">컨트랙트 <code>{config.contractAddress}</code> · {config.network}</div>
