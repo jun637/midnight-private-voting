@@ -24,17 +24,26 @@ const PHASE_LABEL: Record<Status["phase"], string> = {
   error: "오류",
 };
 
-const VOTER_KEY = "private-voting-voter-id";
+// Voter ids are scoped to a contract address: if the server is restarted and
+// redeploys a fresh poll, old registrations no longer exist and must be discarded.
+const voterKey = (contractAddress: string) => `pv-voter:${contractAddress}`;
 
 export function App() {
   const [status, setStatus] = useState<Status | null>(null);
   const [poll, setPoll] = useState<PollData | null>(null);
-  const [voterId, setVoterId] = useState<string | null>(() =>
-    localStorage.getItem(VOTER_KEY),
-  );
+  const [voterId, setVoterId] = useState<string | null>(null);
   const [hasVoted, setHasVoted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string>("");
+
+  const contractAddress = poll?.contractAddress ?? status?.contractAddress ?? null;
+
+  // Load the voter id registered against the CURRENT contract (if any). When the
+  // server redeploys (new address), this yields null and the UI shows "register".
+  useEffect(() => {
+    if (!contractAddress) return;
+    setVoterId(localStorage.getItem(voterKey(contractAddress)));
+  }, [contractAddress]);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -75,7 +84,9 @@ export function App() {
       const r = await fetch("/api/register", { method: "POST" });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? "등록 실패");
-      localStorage.setItem(VOTER_KEY, data.voterId);
+      if (contractAddress) {
+        localStorage.setItem(voterKey(contractAddress), data.voterId);
+      }
       setVoterId(data.voterId);
       setHasVoted(false);
       setMsg("등록 완료 — 이제 익명으로 투표할 수 있어요.");
@@ -97,7 +108,16 @@ export function App() {
         body: JSON.stringify({ voterId, option }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error ?? "투표 실패");
+      if (!r.ok) {
+        // Stale registration (server redeployed / restarted): drop it and re-register.
+        if (typeof data.error === "string" && data.error.includes("Unknown voter")) {
+          if (contractAddress) localStorage.removeItem(voterKey(contractAddress));
+          setVoterId(null);
+          setMsg("세션이 초기화됐어요(서버 재시작). 다시 등록한 뒤 투표해주세요.");
+          return;
+        }
+        throw new Error(data.error ?? "투표 실패");
+      }
       setHasVoted(true);
       setMsg("투표 완료! 당신의 신원은 체인에 남지 않았습니다.");
       void refreshPoll();
