@@ -14,7 +14,7 @@ import {
   NETWORK_ID,
 } from "./wallet.js";
 import { VotingService } from "./voting-service.js";
-import { POLL } from "./poll-config.js";
+import { FEEDBACK } from "./poll-config.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -22,37 +22,27 @@ type Phase = "starting" | "funding" | "deploying" | "ready" | "error";
 let phase: Phase = "starting";
 let phaseDetail = "";
 let service: VotingService | null = null;
-
-// Map a public voterId -> whether they have already voted (server-side guard;
-// the contract's nullifier is the real enforcement).
-const voted = new Set<string>();
+const submitted = new Set<string>();
 
 async function bootstrap() {
   try {
-    const deployerSeed = Buffer.from(randomBytes(32)).toString("hex");
-    const keys = deriveKeys(deployerSeed);
+    const keys = deriveKeys(Buffer.from(randomBytes(32)).toString("hex"));
     const wallet = await initWallet(keys);
     const synced = await wallet.waitForSyncedState();
-    const addr = MidnightBech32m.encode(
-      NETWORK_ID,
-      synced.unshielded.address,
-    ).asString();
+    const addr = MidnightBech32m.encode(NETWORK_ID, synced.unshielded.address).asString();
 
     phase = "funding";
-    phaseDetail = "Funding deployer from genesis + registering DUST";
-    console.log(`[boot] funding ${addr.slice(0, 24)}...`);
+    phaseDetail = "배포 지갑 펀딩 + DUST 등록";
     await fundFromGenesis(addr);
     await waitForNight(wallet, 10_000_000_000n);
     await registerDust(wallet, keys.unshieldedKeystore);
-    const dust = await waitForDust(wallet);
-    if (dust === 0n) throw new Error("DUST balance is 0 — cannot pay fees");
+    if ((await waitForDust(wallet)) === 0n) throw new Error("DUST 0 — 수수료 불가");
 
     phase = "deploying";
-    phaseDetail = `Deploying poll with ${POLL.options.length} options`;
-    console.log("[boot] deploying poll contract...");
+    phaseDetail = "피드백 컨트랙트 배포";
     service = await VotingService.create(wallet, keys);
-    const address = await service.deploy(POLL.options.length);
-    console.log(`[boot] poll deployed at ${address}`);
+    await service.deploy(FEEDBACK.choiceOptions.length, FEEDBACK.ratingMax);
+    console.log(`[boot] deployed at ${service.address}`);
 
     phase = "ready";
     phaseDetail = "";
@@ -67,70 +57,75 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const notReady = (res: express.Response) =>
+  res.status(503).json({ phase, detail: phaseDetail });
+
 app.get("/api/status", (_req, res) => {
-  res.json({
-    phase,
-    detail: phaseDetail,
-    contractAddress: service?.address ?? null,
-    network: NETWORK_ID,
-  });
+  res.json({ phase, detail: phaseDetail, contractAddress: service?.address ?? null, network: NETWORK_ID });
 });
 
-app.get("/api/poll", async (_req, res) => {
-  if (phase !== "ready" || !service) {
-    return res.status(503).json({ phase, detail: phaseDetail });
-  }
+app.get("/api/config", (_req, res) => {
+  res.json({ ...FEEDBACK, phase, contractAddress: service?.address ?? null, network: NETWORK_ID });
+});
+
+app.get("/api/results", async (_req, res) => {
+  if (phase !== "ready" || !service) return notReady(res);
   try {
-    const state = await service.readPoll();
-    res.json({
-      question: POLL.question,
-      options: POLL.options,
-      tallies: state.tallies,
-      totalVotes: state.totalVotes,
-      registeredCount: service.registeredCount,
-      contractAddress: service.address,
-    });
+    res.json({ ...(await service.readResults()), registeredCount: service.registeredCount });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }
 });
 
-// Register a new anonymous voter; returns a private token the client keeps.
-app.post("/api/register", async (_req, res) => {
-  if (phase !== "ready" || !service) {
-    return res.status(503).json({ phase, detail: phaseDetail });
+// Public on-chain artifacts for the privacy visualization.
+app.get("/api/chain", async (_req, res) => {
+  if (phase !== "ready" || !service) return notReady(res);
+  try {
+    res.json(await service.readChain());
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
   }
+});
+
+app.post("/api/register", async (_req, res) => {
+  if (phase !== "ready" || !service) return notReady(res);
   try {
     const voterId = Buffer.from(randomBytes(8)).toString("hex");
-    await service.registerVoter(voterId);
-    res.json({ voterId });
+    const view = await service.registerVoter(voterId);
+    res.json({ voterId, ...view });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }
 });
 
-app.post("/api/vote", async (req, res) => {
-  if (phase !== "ready" || !service) {
-    return res.status(503).json({ phase, detail: phaseDetail });
+app.post("/api/submit", async (req, res) => {
+  if (phase !== "ready" || !service) return notReady(res);
+  const { voterId, rating, choice, feedback } = req.body ?? {};
+  if (
+    typeof voterId !== "string" ||
+    typeof rating !== "number" ||
+    typeof choice !== "number"
+  ) {
+    return res.status(400).json({ error: "voterId, rating, choice required" });
   }
-  const { voterId, option } = req.body ?? {};
-  if (typeof voterId !== "string" || typeof option !== "number") {
-    return res.status(400).json({ error: "voterId (string) and option (number) required" });
-  }
-  if (voted.has(voterId)) {
-    return res.status(409).json({ error: "이미 투표했습니다 (already voted)" });
+  if (submitted.has(voterId)) {
+    return res.status(409).json({ error: "이미 제출했습니다 (already submitted)" });
   }
   try {
-    await service.castVote(voterId, option);
-    voted.add(voterId);
-    const state = await service.readPoll();
-    res.json({ ok: true, tallies: state.tallies, totalVotes: state.totalVotes });
+    const view = await service.submit(
+      voterId,
+      rating,
+      choice,
+      typeof feedback === "string" ? feedback : "",
+    );
+    submitted.add(voterId);
+    res.json({ ok: true, ...view, results: await service.readResults() });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`[server] listening on http://localhost:${PORT}`);
+  console.log(`[server] http://localhost:${PORT}`);
   void bootstrap();
 });

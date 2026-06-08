@@ -14,12 +14,18 @@ export type Witnesses<PS> = {
 
 export type ImpureCircuits<PS> = {
   register(context: __compactRuntime.CircuitContext<PS>): __compactRuntime.CircuitResults<PS, []>;
-  vote(context: __compactRuntime.CircuitContext<PS>, option_0: bigint): __compactRuntime.CircuitResults<PS, []>;
+  submit(context: __compactRuntime.CircuitContext<PS>,
+         rating_0: bigint,
+         choice_0: bigint,
+         feedback_0: string): __compactRuntime.CircuitResults<PS, []>;
 }
 
 export type ProvableCircuits<PS> = {
   register(context: __compactRuntime.CircuitContext<PS>): __compactRuntime.CircuitResults<PS, []>;
-  vote(context: __compactRuntime.CircuitContext<PS>, option_0: bigint): __compactRuntime.CircuitResults<PS, []>;
+  submit(context: __compactRuntime.CircuitContext<PS>,
+         rating_0: bigint,
+         choice_0: bigint,
+         feedback_0: string): __compactRuntime.CircuitResults<PS, []>;
 }
 
 export type PureCircuits = {
@@ -27,7 +33,10 @@ export type PureCircuits = {
 
 export type Circuits<PS> = {
   register(context: __compactRuntime.CircuitContext<PS>): __compactRuntime.CircuitResults<PS, []>;
-  vote(context: __compactRuntime.CircuitContext<PS>, option_0: bigint): __compactRuntime.CircuitResults<PS, []>;
+  submit(context: __compactRuntime.CircuitContext<PS>,
+         rating_0: bigint,
+         choice_0: bigint,
+         feedback_0: string): __compactRuntime.CircuitResults<PS, []>;
 }
 
 export type Ledger = {
@@ -46,14 +55,29 @@ export type Ledger = {
     member(elem_0: Uint8Array): boolean;
     [Symbol.iterator](): Iterator<Uint8Array>
   };
-  tallies: {
+  ratingTally: {
     isEmpty(): boolean;
     size(): bigint;
     member(key_0: bigint): boolean;
     lookup(key_0: bigint): { read(): bigint }
   };
-  readonly optionCount: bigint;
-  readonly totalVotes: bigint;
+  choiceTally: {
+    isEmpty(): boolean;
+    size(): bigint;
+    member(key_0: bigint): boolean;
+    lookup(key_0: bigint): { read(): bigint }
+  };
+  feedbacks: {
+    isEmpty(): boolean;
+    size(): bigint;
+    member(key_0: bigint): boolean;
+    lookup(key_0: bigint): string;
+    [Symbol.iterator](): Iterator<[bigint, string]>
+  };
+  readonly feedbackCount: bigint;
+  readonly choiceCount: bigint;
+  readonly ratingMax: bigint;
+  readonly totalSubmissions: bigint;
 }
 
 export type ContractReferenceLocations = any;
@@ -67,7 +91,8 @@ export declare class Contract<PS = any, W extends Witnesses<PS> = Witnesses<PS>>
   provableCircuits: ProvableCircuits<PS>;
   constructor(witnesses: W);
   initialState(context: __compactRuntime.ConstructorContext<PS>,
-               numOptions_0: bigint): __compactRuntime.ConstructorResult<PS>;
+               numChoices_0: bigint,
+               maxRating_0: bigint): __compactRuntime.ConstructorResult<PS>;
 }
 
 export declare function ledger(state: __compactRuntime.StateValue | __compactRuntime.ChargedState): Ledger;

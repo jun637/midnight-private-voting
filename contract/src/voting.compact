@@ -1,40 +1,52 @@
-// Private Voting — anonymous, double-vote-resistant ballot on Midnight.
+// Private Feedback — anonymous, one-submission-per-person session feedback on Midnight.
 //
 // Privacy model (commitment / nullifier pattern):
-//   - Eligible voters are registered as COMMITMENTS in a Merkle tree.
+//   - Attendees register a COMMITMENT (from a secret) into a Merkle tree.
 //     No one can see who is eligible or link a commitment to an identity.
-//   - To vote, a voter proves (in zero knowledge) that their commitment is
-//     in the tree, then publishes a NULLIFIER derived from the same secret
-//     under a DIFFERENT domain. The nullifier prevents voting twice but is
-//     cryptographically unlinkable to the commitment — so the ballot is anonymous.
-//   - Tallies are public counts; individual votes are not attributable.
+//   - To submit feedback, the attendee proves (in zero knowledge) that their
+//     commitment is in the tree, then publishes a NULLIFIER derived from the
+//     same secret under a DIFFERENT domain. The nullifier blocks a second
+//     submission but is cryptographically unlinkable to the commitment — so
+//     the feedback is anonymous.
+//   - Results (rating distribution, choice tallies, free-text) are public;
+//     individual submissions are not attributable to any person.
 
 pragma language_version >= 0.23;
 
 import CompactStandardLibrary;
 
-// Merkle tree of registered voter commitments. Historic so that membership
-// proofs created before later registrations remain valid. Depth 10 => up to 1024 voters.
+// Merkle tree of registered attendee commitments. Historic so membership proofs
+// created before later registrations stay valid. Depth 10 => up to 1024 people.
 export ledger registeredVoters: HistoricMerkleTree<10, Bytes<32>>;
 
-// Used nullifiers — public by design (you can see SOME vote happened),
-// but unlinkable to commitments (you cannot tell WHO voted).
+// Used nullifiers — public (you can see SOME submission happened) but unlinkable
+// to commitments (you cannot tell WHO submitted). Enforces one submission each.
 export ledger usedNullifiers: Set<Bytes<32>>;
 
-// Per-option vote tallies. Key = option index, value = running Counter.
-export ledger tallies: Map<Uint<8>, Counter>;
+// Satisfaction rating distribution: rating value (1..ratingMax) -> count.
+export ledger ratingTally: Map<Uint<8>, Counter>;
 
-// Number of valid options (set at deployment).
-export ledger optionCount: Uint<8>;
+// Multiple-choice tally: option index -> count.
+export ledger choiceTally: Map<Uint<8>, Counter>;
 
-// Total ballots cast.
-export ledger totalVotes: Counter;
+// Anonymous free-text feedback, public by design (the presenter reads it) but
+// not attributable to any submitter. Keyed by insertion order.
+export ledger feedbacks: Map<Uint<64>, Opaque<"string">>;
+export ledger feedbackCount: Counter;
 
-constructor(numOptions: Uint<8>) {
-  optionCount = disclose(numOptions);
+// Poll shape, set at deployment.
+export ledger choiceCount: Uint<8>;
+export ledger ratingMax: Uint<8>;
+
+// Total submissions cast.
+export ledger totalSubmissions: Counter;
+
+constructor(numChoices: Uint<8>, maxRating: Uint<8>) {
+  choiceCount = disclose(numChoices);
+  ratingMax = disclose(maxRating);
 }
 
-// The voter's secret identity material — never leaves the client.
+// The attendee's secret identity material — never leaves the client.
 witness voter_secret(): Bytes<32>;
 // Random blinding factor for the registration commitment.
 witness voter_randomness(): Bytes<32>;
@@ -57,8 +69,8 @@ circuit derive_nullifier(secret: Bytes<32>): Bytes<32> {
   ]);
 }
 
-// Register an eligible voter. The commitment goes into the Merkle tree;
-// no one can see what it contains.
+// Register an attendee. The commitment goes into the Merkle tree; no one can
+// see what it contains.
 export circuit register(): [] {
   const secret = voter_secret();
   const randomness = voter_randomness();
@@ -66,33 +78,50 @@ export circuit register(): [] {
   registeredVoters.insert(commitment);
 }
 
-// Cast an anonymous vote for `option`.
-export circuit vote(option: Uint<8>): [] {
-  assert(option < optionCount, "Invalid option");
-  // The chosen option is public (it must be counted); only voter identity is hidden.
-  const opt = disclose(option);
+// Submit anonymous feedback: a satisfaction rating, a multiple-choice answer,
+// and a free-text comment — all in one one-per-person submission.
+export circuit submit(
+  rating: Uint<8>,
+  choice: Uint<8>,
+  feedback: Opaque<"string">
+): [] {
+  assert(rating >= 1, "Rating must be >= 1");
+  assert(rating <= ratingMax, "Rating out of range");
+  assert(choice < choiceCount, "Invalid choice");
+  // These public answers are tallied openly; only the submitter stays hidden.
+  const r = disclose(rating);
+  const c = disclose(choice);
 
+  // Prove the commitment is in the tree without revealing which leaf.
   const secret = voter_secret();
   const randomness = voter_randomness();
   const commitment = derive_commitment(secret, randomness);
-
-  // Prove the commitment is in the tree without revealing which leaf.
   const path = get_voter_path(commitment);
   assert(
     registeredVoters.checkRoot(disclose(merkleTreePathRoot<10, Bytes<32>>(path))),
-    "Not a registered voter"
+    "Not a registered attendee"
   );
 
-  // Nullifier (different domain than commitment — unlinkable) prevents double voting.
+  // Nullifier (different domain than commitment — unlinkable) blocks re-submission.
   const nul = derive_nullifier(secret);
-  assert(disclose(!usedNullifiers.member(disclose(nul))), "Already voted");
+  assert(disclose(!usedNullifiers.member(disclose(nul))), "Already submitted");
   usedNullifiers.insert(disclose(nul));
 
-  // Tally the vote. Initialize the slot on first use.
-  if (!tallies.member(opt)) {
-    tallies.insert(opt, default<Counter>);
+  // Tally the satisfaction rating.
+  if (!ratingTally.member(r)) {
+    ratingTally.insert(r, default<Counter>);
   }
-  tallies.lookup(opt).increment(1);
+  ratingTally.lookup(r).increment(1);
 
-  totalVotes.increment(1);
+  // Tally the multiple-choice answer.
+  if (!choiceTally.member(c)) {
+    choiceTally.insert(c, default<Counter>);
+  }
+  choiceTally.lookup(c).increment(1);
+
+  // Append the anonymous free-text comment.
+  feedbacks.insert(feedbackCount, disclose(feedback));
+  feedbackCount.increment(1);
+
+  totalSubmissions.increment(1);
 }

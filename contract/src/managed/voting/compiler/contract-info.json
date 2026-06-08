@@ -16,15 +16,29 @@
       }
     },
     {
-      "name": "vote",
+      "name": "submit",
       "pure": false,
       "proof": true,
       "arguments": [
         {
-          "name": "option",
+          "name": "rating",
           "type": {
             "type-name": "Uint",
             "maxval": 255
+          }
+        },
+        {
+          "name": "choice",
+          "type": {
+            "type-name": "Uint",
+            "maxval": 255
+          }
+        },
+        {
+          "name": "feedback",
+          "type": {
+            "type-name": "Opaque",
+            "tsType": "string"
           }
         }
       ],
@@ -139,7 +153,7 @@
       }
     },
     {
-      "name": "tallies",
+      "name": "ratingTally",
       "index": 2,
       "exported": true,
       "storage": "Map",
@@ -152,8 +166,41 @@
       }
     },
     {
-      "name": "optionCount",
+      "name": "choiceTally",
       "index": 3,
+      "exported": true,
+      "storage": "Map",
+      "key": {
+        "type-name": "Uint",
+        "maxval": 255
+      },
+      "value": {
+        "type-name": "Counter"
+      }
+    },
+    {
+      "name": "feedbacks",
+      "index": 4,
+      "exported": true,
+      "storage": "Map",
+      "key": {
+        "type-name": "Uint",
+        "maxval": 18446744073709551615
+      },
+      "value": {
+        "type-name": "Opaque",
+        "tsType": "string"
+      }
+    },
+    {
+      "name": "feedbackCount",
+      "index": 5,
+      "exported": true,
+      "storage": "Counter"
+    },
+    {
+      "name": "choiceCount",
+      "index": 6,
       "exported": true,
       "storage": "Cell",
       "type": {
@@ -162,8 +209,18 @@
       }
     },
     {
-      "name": "totalVotes",
-      "index": 4,
+      "name": "ratingMax",
+      "index": 7,
+      "exported": true,
+      "storage": "Cell",
+      "type": {
+        "type-name": "Uint",
+        "maxval": 255
+      }
+    },
+    {
+      "name": "totalSubmissions",
+      "index": 8,
       "exported": true,
       "storage": "Counter"
     }

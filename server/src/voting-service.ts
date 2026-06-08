@@ -21,6 +21,7 @@ import {
   createVoterState,
   type VoterPrivateState,
 } from "./witnesses.js";
+import { computeCommitment, computeNullifier, toHex } from "./crypto.js";
 import {
   INDEXER_HTTP,
   INDEXER_WS,
@@ -35,10 +36,29 @@ const ZK_CONFIG_PATH = path.resolve(
   "../../contract/src/managed/voting",
 );
 
-export interface PollState {
-  optionCount: number;
-  totalVotes: number;
-  tallies: number[];
+export interface ResultsState {
+  choiceCount: number;
+  ratingMax: number;
+  totalSubmissions: number;
+  ratingDistribution: number[]; // index 0 => rating 1, etc.
+  ratingAverage: number;
+  choiceTallies: number[];
+  feedbacks: string[];
+}
+
+/** Public on-chain artifacts, for the privacy visualization. */
+export interface ChainState {
+  contractAddress: string;
+  merkleRoot: string; // hex
+  treeSize: number; // number of registered commitments
+  nullifiers: string[]; // hex — public set, unlinkable to commitments
+  submissionCount: number;
+}
+
+/** What a voter privately holds + the values they put on-chain (computed). */
+export interface VoterView {
+  commitment: string; // hex — went into the Merkle tree at register
+  nullifier: string; // hex — published at submit, unlinkable to commitment
 }
 
 /**
@@ -168,16 +188,15 @@ export class VotingService {
     );
   }
 
-  /** Deploy a fresh poll with `numOptions` options. */
-  async deploy(numOptions: number): Promise<string> {
+  /** Deploy a fresh feedback poll. */
+  async deploy(numChoices: number, ratingMax: number): Promise<string> {
     const providers = this.buildProviders("admin");
-    // The deployer needs a private state too; a throwaway voter identity works.
     const deployerState = createVoterState();
     const deployed = await deployContract(providers as never, {
       compiledContract: this.compiled() as never,
       privateStateId: "admin",
       initialPrivateState: deployerState,
-      args: [BigInt(numOptions)],
+      args: [BigInt(numChoices), BigInt(ratingMax)],
     } as never);
     this.contractAddress = (deployed as any).deployTxData.public.contractAddress;
     return this.contractAddress!;
@@ -195,37 +214,109 @@ export class VotingService {
     } as never);
   }
 
-  /** Register a new eligible voter; returns the opaque voter id. */
-  async registerVoter(voterId: string): Promise<void> {
+  /** Register a new attendee; returns their commitment (the value put in the tree). */
+  async registerVoter(voterId: string): Promise<VoterView> {
     if (this.voters.has(voterId))
       throw new Error(`Voter ${voterId} already registered`);
     const state = createVoterState();
     const deployed = await this.connectAs(voterId, state);
     await (deployed as any).callTx.register();
     this.voters.set(voterId, state);
+    return {
+      commitment: toHex(computeCommitment(state.secret, state.randomness)),
+      nullifier: toHex(computeNullifier(state.secret)),
+    };
   }
 
-  /** Cast a vote for `option` as a registered voter. */
-  async castVote(voterId: string, option: number): Promise<void> {
+  /** Submit feedback (rating + choice + free text) as a registered attendee. */
+  async submit(
+    voterId: string,
+    rating: number,
+    choice: number,
+    feedback: string,
+  ): Promise<VoterView> {
     const state = this.voters.get(voterId);
     if (!state) throw new Error(`Unknown voter ${voterId}`);
     const deployed = await this.connectAs(voterId, state);
-    await (deployed as any).callTx.vote(BigInt(option));
+    await (deployed as any).callTx.submit(BigInt(rating), BigInt(choice), feedback);
+    return {
+      commitment: toHex(computeCommitment(state.secret, state.randomness)),
+      nullifier: toHex(computeNullifier(state.secret)),
+    };
   }
 
-  /** Read the public poll state (option count, total votes, per-option tallies). */
-  async readPoll(): Promise<PollState> {
+  /** The commitment/nullifier a registered voter holds (no chain call). */
+  voterView(voterId: string): VoterView | null {
+    const state = this.voters.get(voterId);
+    if (!state) return null;
+    return {
+      commitment: toHex(computeCommitment(state.secret, state.randomness)),
+      nullifier: toHex(computeNullifier(state.secret)),
+    };
+  }
+
+  private async readLedger() {
     if (!this.contractAddress) throw new Error("Contract not deployed yet");
     const provider = indexerPublicDataProvider(INDEXER_HTTP, INDEXER_WS);
     const state = await provider.queryContractState(this.contractAddress);
     if (!state) throw new Error("Contract state not found");
-    const l = votingLedger(state.data);
-    const optionCount = Number(l.optionCount);
-    const tallies: number[] = [];
-    for (let i = 0; i < optionCount; i++) {
-      tallies.push(l.tallies.member(BigInt(i)) ? Number(l.tallies.lookup(BigInt(i)).read()) : 0);
+    return votingLedger(state.data);
+  }
+
+  /** Public results: rating distribution + average, choice tallies, free text. */
+  async readResults(): Promise<ResultsState> {
+    const l = await this.readLedger();
+    const ratingMax = Number(l.ratingMax);
+    const choiceCount = Number(l.choiceCount);
+    const ratingDistribution: number[] = [];
+    let ratingSum = 0;
+    let ratingN = 0;
+    for (let r = 1; r <= ratingMax; r++) {
+      const n = l.ratingTally.member(BigInt(r))
+        ? Number(l.ratingTally.lookup(BigInt(r)).read())
+        : 0;
+      ratingDistribution.push(n);
+      ratingSum += r * n;
+      ratingN += n;
     }
-    return { optionCount, totalVotes: Number(l.totalVotes), tallies };
+    const choiceTallies: number[] = [];
+    for (let c = 0; c < choiceCount; c++) {
+      choiceTallies.push(
+        l.choiceTally.member(BigInt(c))
+          ? Number(l.choiceTally.lookup(BigInt(c)).read())
+          : 0,
+      );
+    }
+    const feedbacks: string[] = [];
+    for (const [, text] of l.feedbacks) feedbacks.push(text);
+    return {
+      choiceCount,
+      ratingMax,
+      totalSubmissions: Number(l.totalSubmissions),
+      ratingDistribution,
+      ratingAverage: ratingN > 0 ? ratingSum / ratingN : 0,
+      choiceTallies,
+      feedbacks,
+    };
+  }
+
+  /** Public on-chain artifacts for the privacy visualization. */
+  async readChain(): Promise<ChainState> {
+    const l = await this.readLedger();
+    const nullifiers: string[] = [];
+    for (const n of l.usedNullifiers) nullifiers.push(toHex(n));
+    const digest = l.registeredVoters.root();
+    const merkleRoot =
+      typeof (digest as any).field === "bigint"
+        ? (digest as any).field.toString(16)
+        : String((digest as any).field ?? digest);
+    return {
+      contractAddress: this.contractAddress!,
+      merkleRoot,
+      treeSize: Number(l.registeredVoters.firstFree()),
+      nullifiers,
+      submissionCount: Number(l.totalSubmissions),
+    };
   }
 
   get address(): string | null {
