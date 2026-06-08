@@ -380,3 +380,33 @@ header h1 { font-size: 1.8rem; }
 .done { color: var(--accent); }
 .bar-fill, .rbar { background: linear-gradient(90deg, var(--accent), var(--accent2)); }
 .rbar { background: linear-gradient(180deg, var(--accent2), var(--accent)); }
+
+/* ════ de-AI pass: high-contrast text, solid fills, flat, terse ════ */
+:root { --muted: #c9cad0; }              /* no murky gray; legible secondary */
+
+.block-title { font-size: 1.02rem; font-weight: 700; color: #fff; margin: 0 0 14px; letter-spacing: -.01em; }
+.block-title.done { color: var(--accent); }
+.q { font-size: .92rem; font-weight: 600; color: #fff; margin: 18px 0 9px; }
+.q:first-of-type { margin-top: 6px; }
+.sm { font-size: .85rem; color: var(--muted); }
+.faint { color: #c9cad0; }
+.lead { color: var(--muted); line-height: 1.6; margin: 0 0 16px; }
+.muted, .detail, .opt-count, .totals, .note, .fork-label, .cs-note, .hintline, .sub { color: var(--muted); }
+.note { opacity: 1; }
+
+/* solid fills, no gradients */
+.bar-fill, .rbar, .choice.on, .primary, .primary.big { background: var(--accent); }
+.rbar { background: var(--accent); }
+.choice.on { color: #fff; }
+.primary, .primary.big { color: #fff; }
+
+/* lock: clean label, no emoji badge */
+.lock-badge { display: none; }
+.lock-overlay { inset: 46px 0 0 0; padding-top: 48px; }
+.lock-tag { font-size: .72rem; font-weight: 700; letter-spacing: .14em; color: var(--accent); border: 1px solid var(--accent); border-radius: 6px; padding: 4px 11px; background: rgba(6,119,249,.06); }
+.lock-text { margin-top: 14px; color: #fff; font-size: .9rem; background: none; padding: 0; }
+
+/* flatter cards (match tracker density) */
+.card { box-shadow: 0 1px 0 rgba(255,255,255,.02), 0 2px 10px rgba(0,0,0,.3); }
+.pane { border-radius: 10px; }
+.viz .domain { margin: 4px 0 2px; }

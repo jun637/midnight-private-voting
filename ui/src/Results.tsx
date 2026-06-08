@@ -6,14 +6,14 @@ export function ResultsView({ config, results }: { config: Config; results: Resu
   return (
     <div className="card">
       <div className="results-head">
-        <h2>실시간 결과</h2>
+        <div className="block-title">실시간 결과</div>
         <div className="stat">
           <span className="big">{results.ratingAverage.toFixed(1)}</span>
-          <span className="muted"> / {results.ratingMax} 평균 만족도 · {results.totalSubmissions}명 제출</span>
+          <span className="sm"> / {results.ratingMax} 평균 · {results.totalSubmissions}명 제출</span>
         </div>
       </div>
 
-      <h4>{config.ratingQuestion}</h4>
+      <div className="q">{config.ratingQuestion}</div>
       <div className="rating-dist">
         {results.ratingDistribution.map((n, i) => (
           <div className="rcol" key={i}>
@@ -27,7 +27,7 @@ export function ResultsView({ config, results }: { config: Config; results: Resu
         ))}
       </div>
 
-      <h4>{config.choiceQuestion}</h4>
+      <div className="q">{config.choiceQuestion}</div>
       <ul className="options">
         {config.choiceOptions.map((opt, i) => {
           const c = results.choiceTallies[i] ?? 0;
@@ -46,11 +46,11 @@ export function ResultsView({ config, results }: { config: Config; results: Resu
         })}
       </ul>
 
-      <h4>{config.freeTextPrompt} · 익명 피드백 월</h4>
+      <div className="q">{config.freeTextPrompt} · 익명</div>
       <div className="wall">
-        {results.feedbacks.length === 0 && <div className="muted">아직 의견이 없습니다.</div>}
+        {results.feedbacks.length === 0 && <div className="faint">아직 의견이 없습니다.</div>}
         {results.feedbacks.map((f, i) => (
-          <div className="note-card" key={i}>{f || <span className="muted">(빈 의견)</span>}</div>
+          <div className="note-card" key={i}>{f || <span className="faint">(빈 의견)</span>}</div>
         ))}
       </div>
     </div>

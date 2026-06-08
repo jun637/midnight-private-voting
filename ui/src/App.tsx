@@ -4,9 +4,9 @@ import { DomainSeparation, DualPanel, FindYourVote, ZkCeremony } from "./Privacy
 import { ResultsView } from "./Results.tsx";
 
 const PHASE_LABEL: Record<string, string> = {
-  starting: "지갑 초기화 중…",
-  funding: "배포 지갑 펀딩 + DUST 등록 중…",
-  deploying: "피드백 컨트랙트 배포 중…",
+  starting: "지갑 초기화 중",
+  funding: "배포 지갑 펀딩, DUST 등록 중",
+  deploying: "피드백 컨트랙트 배포 중",
   ready: "준비 완료",
   error: "오류",
 };
@@ -70,13 +70,13 @@ export function App() {
   async function register() {
     if (!addr) return;
     setBusy(true);
-    setMsg("참여자 등록 중… (commitment 생성 + 트리 합류)");
+    setMsg("등록 중. commitment 생성 후 트리에 합류합니다.");
     try {
       const v = await api.register();
       const saved: Saved = { voterId: v.voterId!, commitment: v.commitment, nullifier: v.nullifier, done: false };
       localStorage.setItem(savedKey(addr), JSON.stringify(saved));
       setMe(saved);
-      setMsg("등록 완료 — 이제 익명으로 피드백을 남길 수 있어요.");
+      setMsg("등록 완료. 이제 익명으로 작성할 수 있습니다.");
       void refresh();
     } catch (e) {
       setMsg(`등록 실패: ${(e as Error).message}`);
@@ -90,7 +90,7 @@ export function App() {
   async function submit() {
     if (!me || !addr) return;
     if (rating < 1 || choice < 0) {
-      setMsg("만족도와 객관식 항목을 선택해주세요.");
+      setMsg("만족도와 객관식 항목을 선택하세요.");
       return;
     }
     setBusy(true);
@@ -106,7 +106,7 @@ export function App() {
       setMe(saved);
       setResults(r.results);
       setChain(await api.chain());
-      setMsg("제출 완료! 당신의 신원은 체인에 남지 않았습니다.");
+      setMsg("");
     } catch (e) {
       if (ceremonyTimer.current) clearInterval(ceremonyTimer.current);
       setStep(0);
@@ -114,7 +114,7 @@ export function App() {
       if (m.includes("Unknown voter")) {
         localStorage.removeItem(savedKey(addr));
         setMe(null);
-        setMsg("세션이 초기화됐어요(서버 재시작). 다시 등록해주세요.");
+        setMsg("세션이 초기화됐습니다. 다시 등록하세요.");
       } else {
         setMsg(`제출 실패: ${m}`);
       }
@@ -123,7 +123,6 @@ export function App() {
     }
   }
 
-  // ─── Loading (full width) ───
   if (!config || config.phase !== "ready") {
     return (
       <div className="wrap">
@@ -131,8 +130,8 @@ export function App() {
         <div className="card status">
           <div className="spinner" />
           <div>
-            <strong>{config ? PHASE_LABEL[config.phase] : "서버 연결 중…"}</strong>
-            <div className="detail">{config?.phase === "error" ? "오류 — 서버 로그 확인" : "잠시만요…"}</div>
+            <strong>{config ? PHASE_LABEL[config.phase] : "서버 연결 중"}</strong>
+            <div className="detail">{config?.phase === "error" ? "서버 로그를 확인하세요." : "잠시만 기다려 주세요."}</div>
           </div>
         </div>
       </div>
@@ -142,54 +141,49 @@ export function App() {
   const choiceLabel = choice >= 0 ? config.choiceOptions[choice] : "(미선택)";
   const submitting = busy && step < 4 && !me?.done && rating >= 1;
 
-  // ─── LEFT: 참여 (action) ───
   const actionContent = submitting ? (
     <div className="card">
-      <h2>영지식 증명 생성 중…</h2>
+      <div className="block-title">영지식 증명 생성</div>
       <ZkCeremony step={step} commitment={me?.commitment ?? ""} nullifier={me?.nullifier ?? ""} />
-      <p className="muted">실제 ZK 증명을 만드는 중이라 수십 초 걸립니다. 이게 진짜 Midnight 연산이에요.</p>
+      <p className="muted sm">실제 ZK 증명을 생성하는 단계라 수십 초가 걸립니다.</p>
     </div>
   ) : !me ? (
-    <div className="card hero">
-      <h2>오늘 세션, 익명으로 평가하기</h2>
-      <p className="lead">먼저 익명 신분을 만들면 시작됩니다. 신원은 체인에 남지 않습니다.</p>
-      <button className="primary big" disabled={busy} onClick={register}>익명으로 시작하기 →</button>
+    <div className="card">
+      <div className="block-title">익명으로 시작</div>
+      <p className="lead">먼저 익명 신분(commitment)을 만듭니다. 신원은 체인에 기록되지 않습니다.</p>
+      <button className="primary" disabled={busy} onClick={register}>익명으로 시작</button>
       {msg && <div className="msg">{msg}</div>}
     </div>
   ) : !me.done ? (
     <div className="card">
-      <div className="hero-eyebrow">STEP 2 · 작성</div>
-      <h2>{config.title}</h2>
-      <p className="lead-sm">입력하는 내용이 오른쪽 <b>"나 vs 체인"</b>에 실시간으로 비칩니다.</p>
-      <h4>{config.ratingQuestion}</h4>
+      <div className="block-title">{config.title}</div>
+      <div className="q">{config.ratingQuestion}</div>
       <div className="stars">
         {Array.from({ length: config.ratingMax }, (_, i) => (
           <button key={i} className={`star ${rating >= i + 1 ? "on" : ""}`} onClick={() => setRating(i + 1)} aria-label={`${i + 1}점`}>★</button>
         ))}
       </div>
-      <h4>{config.choiceQuestion}</h4>
+      <div className="q">{config.choiceQuestion}</div>
       <div className="choices">
         {config.choiceOptions.map((opt, i) => (
           <button key={i} className={`choice ${choice === i ? "on" : ""}`} onClick={() => setChoice(i)}>{opt}</button>
         ))}
       </div>
-      <h4>{config.freeTextPrompt}</h4>
+      <div className="q">{config.freeTextPrompt}</div>
       <textarea className="freetext" rows={3} placeholder="자유롭게 남겨주세요 (선택)" value={feedback} onChange={(e) => setFeedback(e.target.value)} />
-      <button className="primary big" disabled={busy} onClick={submit}>② 익명으로 제출 →</button>
+      <button className="primary" disabled={busy} onClick={submit}>익명으로 제출</button>
       <div className={`hintline ${rating >= 1 && choice >= 0 ? "ok" : ""}`}>
-        {rating < 1 ? "만족도를 선택하세요" : choice < 0 ? "객관식 항목을 선택하세요" : "제출 준비 완료 — 신원은 노출되지 않습니다"}
+        {rating < 1 ? "만족도를 선택하세요." : choice < 0 ? "객관식 항목을 선택하세요." : "제출 준비 완료. 신원은 노출되지 않습니다."}
       </div>
       {msg && <div className="msg">{msg}</div>}
     </div>
   ) : (
-    <div className="card done-card">
-      <div className="done">✅ 제출 완료 (익명)</div>
-      <div className="muted">{msg || "당신의 신원은 체인에 남지 않았습니다."}</div>
-      <p className="lead-sm" style={{ marginTop: 14 }}>오른쪽에서 <b>내 제출을 직접 찾아보세요</b> — 못 찾는 게 정상입니다.</p>
+    <div className="card">
+      <div className="block-title done">제출 완료</div>
+      <p className="lead">익명으로 기록됐습니다. 신원은 체인에 남지 않았습니다. 오른쪽에서 직접 확인해 보세요.</p>
     </div>
   );
 
-  // ─── RIGHT: 대시보드 (observe / verify) ───
   const dashboardContent = (
     <>
       {me && (
@@ -215,15 +209,15 @@ export function App() {
       <Header config={config} />
       <div className={`layout${dashboardLocked ? " pre" : ""}`}>
         <section className="col col-action">
-          <div className="col-tag">🙋 참여 · 당신이 하는 곳</div>
+          <div className="col-tag">참여</div>
           {actionContent}
         </section>
         <section className={`col col-dashboard${dashboardLocked ? " locked" : ""}`}>
-          <div className="col-tag dash">📊 대시보드 · 관찰 · 검증</div>
+          <div className="col-tag">결과 · 검증</div>
           {dashboardLocked && (
             <div className="lock-overlay">
-              <div className="lock-badge">🔒</div>
-              <div className="lock-text">왼쪽에서 <b>참여를 시작</b>하면<br />이 영역이 활성화됩니다</div>
+              <div className="lock-tag">LOCKED</div>
+              <div className="lock-text">왼쪽에서 참여를 시작하면 활성화됩니다.</div>
             </div>
           )}
           <div className="dash-body">{dashboardContent}</div>
@@ -231,9 +225,9 @@ export function App() {
       </div>
       <footer>
         {config.contractAddress && (
-          <div className="addr">컨트랙트 <code>{config.contractAddress}</code> · {config.network}</div>
+          <div className="addr">contract <code>{config.contractAddress}</code> · {config.network}</div>
         )}
-        <div className="note">로컬 devnet · 서버가 증명을 대행합니다. 온체인엔 익명 commitment와 nullifier만 기록됩니다.</div>
+        <div className="note">로컬 devnet. 서버가 증명을 대행하며, 온체인에는 익명 commitment와 nullifier만 기록됩니다.</div>
       </footer>
     </div>
   );
@@ -242,7 +236,7 @@ export function App() {
 function Header({ config }: { config: Config | null }) {
   return (
     <header>
-      <h1>🗳️ {config?.title ?? "비공개 피드백"}</h1>
+      <h1>{config?.title ?? "비공개 피드백"}</h1>
       <p className="sub">{config?.subtitle ?? "Midnight · commitment/nullifier 영지식 패턴"}</p>
     </header>
   );
