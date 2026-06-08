@@ -410,3 +410,28 @@ header h1 { font-size: 1.8rem; }
 .card { box-shadow: 0 1px 0 rgba(255,255,255,.02), 0 2px 10px rgba(0,0,0,.3); }
 .pane { border-radius: 10px; }
 .viz .domain { margin: 4px 0 2px; }
+
+/* ════ stage flow: vote → explain → results (sequential, full-screen acts) ════ */
+.stage { animation: stagein .42s cubic-bezier(.2,.7,.2,1) both; }
+@keyframes stagein { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+/* progress chips (state, not instruction) */
+.stage-dots { display: flex; gap: 8px; justify-content: center; margin: 4px 0 26px; }
+.sdot2 { font-size: .78rem; color: var(--muted); padding: 5px 14px; border-radius: 999px; border: 1px solid var(--border-soft); transition: all .2s; }
+.sdot2.on { color: #fff; border-color: var(--accent); background: rgba(6,119,249,.1); font-weight: 700; }
+.sdot2.past { color: var(--accent); border-color: var(--border-soft); }
+
+/* act 1: vote (single focus) */
+.vote-card { max-width: 540px; margin: 0 auto; }
+
+/* act 2: explain (how it works grid) */
+.explain-stage { max-width: 980px; margin: 0 auto; }
+.stage-head { text-align: center; margin-bottom: 20px; }
+.stage-head .block-title { font-size: 1.35rem; margin-bottom: 6px; }
+.explain-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; margin-top: 16px; }
+@media (max-width: 780px) { .explain-grid { grid-template-columns: 1fr; } }
+.stage-cta { text-align: center; margin-top: 22px; }
+.stage-cta .primary { min-width: 240px; padding: 14px 28px; font-size: 1.02rem; }
+
+/* act 3: results */
+.results-stage { max-width: 760px; margin: 0 auto; }
