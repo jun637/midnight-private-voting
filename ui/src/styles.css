@@ -230,3 +230,41 @@ code { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
   .layout { grid-template-columns: 1fr; }
   .col-action { position: static; }
 }
+
+/* ─── v3: purpose / method / outcome clarity ─── */
+
+/* flow stepper (how-to + progress, full width under header) */
+.stepper { display: flex; gap: 0; margin: 0 0 22px; background: var(--card); border: 1px solid #242a44; border-radius: 14px; padding: 14px 18px; }
+.sstep { flex: 1; display: flex; align-items: center; gap: 10px; position: relative; min-width: 0; }
+.sdot { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: .8rem; font-weight: 700; flex-shrink: 0; background: #0e1120; border: 1px solid #2a2f4a; color: var(--muted); }
+.slabel { font-size: .85rem; color: var(--muted); white-space: nowrap; }
+.sline { position: absolute; left: 26px; right: -10px; top: 13px; height: 2px; background: #2a2f4a; z-index: 0; }
+.sstep:last-child .sline { display: none; }
+.sstep.active .sdot { background: linear-gradient(135deg, var(--accent), var(--accent2)); border-color: transparent; color: #0b0d17; box-shadow: 0 0 0 4px rgba(124,92,255,.18); }
+.sstep.active .slabel { color: var(--text); font-weight: 700; }
+.sstep.done .sdot { background: var(--accent2); border-color: transparent; color: #0b0d17; }
+.sstep.done .slabel { color: var(--text); }
+.sstep.done .sline { background: var(--accent2); }
+@media (max-width: 560px) { .slabel { display: none; } }
+
+/* purpose hero (pre-register) */
+.hero-eyebrow { display: inline-block; font-size: .72rem; font-weight: 700; letter-spacing: .8px; color: var(--accent2); background: rgba(0,224,198,.1); border: 1px solid #14463f; padding: 4px 10px; border-radius: 999px; margin-bottom: 10px; }
+.hero h2 { margin: 0 0 8px; font-size: 1.4rem; }
+.lead-sm { color: var(--muted); font-size: .85rem; line-height: 1.5; margin: 0 0 4px; }
+.how { margin: 14px 0; padding-left: 0; list-style: none; counter-reset: how; }
+.how li { counter-increment: how; position: relative; padding: 8px 0 8px 34px; font-size: .9rem; line-height: 1.45; border-top: 1px solid rgba(255,255,255,.05); }
+.how li::before { content: counter(how); position: absolute; left: 0; top: 8px; width: 22px; height: 22px; border-radius: 50%; background: rgba(124,92,255,.15); border: 1px solid var(--accent); color: var(--accent); display: grid; place-items: center; font-size: .75rem; font-weight: 700; }
+.outcome { background: #0e1a1c; border: 1px solid #14463f; border-radius: 12px; padding: 14px 16px; margin: 16px 0; }
+.outcome-h { font-size: .82rem; color: var(--accent2); font-weight: 700; margin-bottom: 8px; }
+.outcome ul { margin: 0; padding-left: 2px; list-style: none; }
+.outcome li { font-size: .85rem; line-height: 1.7; }
+.primary.big { width: 100%; padding: 14px; font-size: 1.05rem; margin-top: 6px; }
+.hintline { margin-top: 10px; font-size: .8rem; color: var(--muted); text-align: center; }
+.hintline.ok { color: var(--accent2); }
+
+/* column sub-label (purpose per column) */
+.col-tag { display: flex; flex-direction: column; gap: 3px; }
+.col-sub { font-weight: 400; font-size: .78rem; color: var(--muted); }
+
+/* dashboard pre-participation framing */
+.preview-hint { font-size: .88rem; line-height: 1.6; background: linear-gradient(90deg, rgba(124,92,255,.1), transparent); border: 1px dashed #3a2a66; }
